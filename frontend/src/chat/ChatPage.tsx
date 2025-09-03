@@ -16,20 +16,22 @@ const API_BASE =
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const roomIdRef = useRef<string>("general");
+  const me = useRef<string>("user-1");
+  const other = useRef<string>("user-2");
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const roomId = roomIdRef.current;
-    // load history
-    fetch(`${API_BASE}/rooms/${roomId}/messages`)
+    const a = me.current;
+    const b = other.current;
+    // history
+    fetch(`${API_BASE}/dm/${a}/${b}/messages`)
       .then((r) => r.json())
       .then(setMessages)
       .catch(() => setMessages([]));
-    // connect socket
+    // socket
     const s = io(API_BASE, { transports: ["websocket"] });
     socketRef.current = s;
-    s.emit("room:join", roomId);
+    s.emit("dm:join", { a, b });
     s.on("message:new", (msg: Message) =>
       setMessages((prev) => [...prev, msg])
     );
@@ -37,21 +39,20 @@ export default function ChatPage() {
       s.close();
     };
   }, []);
-  const me = useRef<string>('user-1');
-  const other = useRef<string>('user-2');
+
   function send() {
-    const roomId = roomIdRef.current;
-    const userId = "user-1"; // TODO: plug real auth
-    const a = me.current; const b = other.current;
-    // load 1-1 history
-    fetch(`${API_BASE}/dm/${a}/${b}/messages`)
+    const from = me.current;
+    const to = other.current;
+    const content = input.trim();
+    if (!content) return;
+    socketRef.current?.emit("dm:send", { from, to, content });
     setInput("");
   }
 
   return (
     <div className="dash">
       <aside className="dash__sidebar">
-    s.emit('dm:join', { a, b });
+        <div className="brand">
           <div className="brand__logo">
             <span className="logo-pill">U</span>
           </div>
@@ -59,10 +60,11 @@ export default function ChatPage() {
         </div>
         <nav className="nav">
           {["Overview", "Task", "Mentors", "Message", "Settings"].map((n) => (
-    const from = me.current; const to = other.current;
+            <a
+              key={n}
               className={`nav__item ${n === "Message" ? "active" : ""}`}
               href="#/chat">
-    socketRef.current?.emit('dm:send', { from, to, content });
+              {n}
             </a>
           ))}
         </nav>
@@ -156,7 +158,7 @@ export default function ChatPage() {
               {messages.map((m, idx) => (
                 <div
                   key={m._id || idx}
-                  className={`bubble ${m.userId === "user-1" ? "me" : ""}`}>
+                  className={`bubble ${m.userId === me.current ? "me" : ""}`}>
                   {m.content}
                 </div>
               ))}
@@ -173,7 +175,7 @@ export default function ChatPage() {
                 ➤
               </button>
             </div>
-                <div key={m._id || idx} className={`bubble ${m.userId === me.current ? "me" : ""}`}>
+          </div>
         </div>
       </main>
 

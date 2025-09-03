@@ -59,22 +59,25 @@ async function main() {
   });
 
   // 1-1: history
-  app.get('/dm/:a/:b/messages', async (req, res) => {
-    const id = convId(req.params.a, req.params.b)
-    const docs = await Message.find({ roomId: id }).sort({ createdAt: 1 }).limit(200).lean()
-    res.json(docs)
-  })
+  app.get("/dm/:a/:b/messages", async (req, res) => {
+    const id = convId(req.params.a, req.params.b);
+    const docs = await Message.find({ roomId: id })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .lean();
+    res.json(docs);
+  });
 
   // 1-1: send
-  app.post('/dm/:a/:b/messages', async (req, res) => {
-    const { a, b } = req.params
-    const { from, content } = req.body
-    if(!content) return res.status(400).json({ error: 'content required' })
-    const roomId = convId(a,b)
-    const msg = await Message.create({ roomId, userId: from, content })
-    io.to(roomId).emit('message:new', msg)
-    res.status(201).json(msg)
-  })
+  app.post("/dm/:a/:b/messages", async (req, res) => {
+    const { a, b } = req.params;
+    const { from, content } = req.body;
+    if (!content) return res.status(400).json({ error: "content required" });
+    const roomId = convId(a, b);
+    const msg = await Message.create({ roomId, userId: from, content });
+    io.to(roomId).emit("message:new", msg);
+    res.status(201).json(msg);
+  });
 
   io.on("connection", (socket) => {
     socket.on("room:join", (roomId) => {
@@ -87,15 +90,15 @@ async function main() {
     });
 
     // 1-1 sockets
-    socket.on('dm:join', ({ a, b }) => {
-      socket.join(convId(a,b))
-    })
-    socket.on('dm:send', async ({ from, to, content }) => {
-      if(!content) return
-      const roomId = convId(from, to)
-      const msg = await Message.create({ roomId, userId: from, content })
-      io.to(roomId).emit('message:new', msg)
-    })
+    socket.on("dm:join", ({ a, b }) => {
+      socket.join(convId(a, b));
+    });
+    socket.on("dm:send", async ({ from, to, content }) => {
+      if (!content) return;
+      const roomId = convId(from, to);
+      const msg = await Message.create({ roomId, userId: from, content });
+      io.to(roomId).emit("message:new", msg);
+    });
   });
 
   const PORT = process.env.PORT || 4000;
