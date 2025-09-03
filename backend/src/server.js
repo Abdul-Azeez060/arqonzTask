@@ -1,39 +1,108 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const http = require("http");
+const { Server } = require("socket.io");
+const mongoose = require("mongoose");
 dotenv.config();
 
-const app = express();
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
-app.use(express.json());
+// Mongo models
+const messageSchema = new mongoose.Schema(
+  {
+    roomId: { type: String, index: true },
+    userId: String,
+    content: String,
+  },
+  { timestamps: { createdAt: "createdAt", updatedAt: false } }
+);
+const Message =
+  mongoose.models.Message || mongoose.model("Message", messageSchema);
 
-// Simple health
-app.get("/health", (_req, res) => res.json({ ok: true }));
+async function main() {
+  const MONGO_URI =
+    process.env.MONGO_URI || "mongodb://127.0.0.1:27017/mern_chat";
+  await mongoose.connect(MONGO_URI);
 
-// In a typical Supabase chat, the frontend writes directly to Supabase using RLS policies.
-// This backend offers: (1) a signed upload for avatars (future), (2) a webhook endpoint
-// that Supabase can call on INSERT to fan-out to Server-Sent Events (SSE) consumers.
+  const app = express();
+  app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
+  app.use(express.json());
 
-// SSE channel to push new messages (for non-Supabase clients/tests)
-const clients = new Set();
-app.get("/events", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-  const client = { res };
-  clients.add(client);
-  req.on("close", () => clients.delete(client));
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: { origin: process.env.FRONTEND_ORIGIN || "*" },
+  });
+
+  // health
+  app.get("/health", (_req, res) => res.json({ ok: true }));
+
+  // helper to build 1-1 conversation id
+  const convId = (a, b) => [a, b].sort().join(":");
+
+  // history
+  app.get("/rooms/:roomId/messages", async (req, res) => {
+    const { roomId } = req.params;
+    const docs = await Message.find({ roomId })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .lean();
+    res.json(docs);
+  });
+
+  // simple post (also emits)
+  app.post("/rooms/:roomId/messages", async (req, res) => {
+    const { roomId } = req.params;
+    const { userId, content } = req.body;
+    if (!content) return res.status(400).json({ error: "content required" });
+    const msg = await Message.create({ roomId, userId, content });
+    io.to(roomId).emit("message:new", msg);
+    res.status(201).json(msg);
+  });
+
+  // 1-1: history
+  app.get('/dm/:a/:b/messages', async (req, res) => {
+    const id = convId(req.params.a, req.params.b)
+    const docs = await Message.find({ roomId: id }).sort({ createdAt: 1 }).limit(200).lean()
+    res.json(docs)
+  })
+
+  // 1-1: send
+  app.post('/dm/:a/:b/messages', async (req, res) => {
+    const { a, b } = req.params
+    const { from, content } = req.body
+    if(!content) return res.status(400).json({ error: 'content required' })
+    const roomId = convId(a,b)
+    const msg = await Message.create({ roomId, userId: from, content })
+    io.to(roomId).emit('message:new', msg)
+    res.status(201).json(msg)
+  })
+
+  io.on("connection", (socket) => {
+    socket.on("room:join", (roomId) => {
+      socket.join(roomId);
+    });
+    socket.on("message:send", async ({ roomId, userId, content }) => {
+      if (!content) return;
+      const msg = await Message.create({ roomId, userId, content });
+      io.to(roomId).emit("message:new", msg);
+    });
+
+    // 1-1 sockets
+    socket.on('dm:join', ({ a, b }) => {
+      socket.join(convId(a,b))
+    })
+    socket.on('dm:send', async ({ from, to, content }) => {
+      if(!content) return
+      const roomId = convId(from, to)
+      const msg = await Message.create({ roomId, userId: from, content })
+      io.to(roomId).emit('message:new', msg)
+    })
+  });
+
+  const PORT = process.env.PORT || 4000;
+  server.listen(PORT, () => console.log(`API listening on :${PORT}`));
+}
+
+main().catch((err) => {
+  console.error("Server failed to start", err);
+  process.exit(1);
 });
-
-// Supabase function/webhook can POST here with a message payload to bridge to SSE
-app.post("/hooks/message", (req, res) => {
-  const { id, room_id, user_id, content, created_at } = req.body || {};
-  const payload = { id, room_id, user_id, content, created_at };
-  const data = `data: ${JSON.stringify(payload)}\n\n`;
-  for (const c of clients) c.res.write(data);
-  res.status(200).json({ ok: true });
-});
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`API listening on :${PORT}`));

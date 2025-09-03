@@ -1,78 +1,57 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient, RealtimeChannel } from "@supabase/supabase-js";
+import { useEffect, useRef, useState } from "react";
+import { io, Socket } from "socket.io-client";
 import "../dashboard/Dashboard.css";
 
 type Message = {
-  id: number;
-  room_id: string;
-  user_id: string;
+  _id?: string;
+  roomId: string;
+  userId: string;
   content: string;
-  created_at: string;
+  createdAt?: string;
 };
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
 
 export default function ChatPage() {
-  const supabase = useMemo(
-    () => createClient(SUPABASE_URL, SUPABASE_ANON_KEY),
-    []
-  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const roomIdRef = useRef<string>("00000000-0000-0000-0000-000000000001");
+  const roomIdRef = useRef<string>("general");
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    let channel: RealtimeChannel | null = null;
-
-    async function init() {
-      const room_id = roomIdRef.current;
-      // load history
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("room_id", room_id)
-        .order("created_at", { ascending: true });
-      setMessages((data as Message[]) || []);
-      // realtime
-      channel = supabase
-        .channel("room-" + room_id)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `room_id=eq.${room_id}`,
-          },
-          (payload) => {
-            setMessages((prev) => [...prev, payload.new as Message]);
-          }
-        )
-        .subscribe();
-    }
-    init();
+    const roomId = roomIdRef.current;
+    // load history
+    fetch(`${API_BASE}/rooms/${roomId}/messages`)
+      .then((r) => r.json())
+      .then(setMessages)
+      .catch(() => setMessages([]));
+    // connect socket
+    const s = io(API_BASE, { transports: ["websocket"] });
+    socketRef.current = s;
+    s.emit("room:join", roomId);
+    s.on("message:new", (msg: Message) =>
+      setMessages((prev) => [...prev, msg])
+    );
     return () => {
-      channel && supabase.removeChannel(channel);
+      s.close();
     };
-  }, [supabase]);
-
-  async function send() {
-    const room_id = roomIdRef.current;
-    const uid =
-      (await supabase.auth.getUser()).data.user?.id ||
-      "00000000-0000-0000-0000-000000000000";
-    if (!input.trim()) return;
-    await supabase
-      .from("messages")
-      .insert({ room_id, user_id: uid, content: input.trim() });
+  }, []);
+  const me = useRef<string>('user-1');
+  const other = useRef<string>('user-2');
+  function send() {
+    const roomId = roomIdRef.current;
+    const userId = "user-1"; // TODO: plug real auth
+    const a = me.current; const b = other.current;
+    // load 1-1 history
+    fetch(`${API_BASE}/dm/${a}/${b}/messages`)
     setInput("");
   }
 
   return (
     <div className="dash">
       <aside className="dash__sidebar">
-        <div className="brand">
+    s.emit('dm:join', { a, b });
           <div className="brand__logo">
             <span className="logo-pill">U</span>
           </div>
@@ -80,11 +59,10 @@ export default function ChatPage() {
         </div>
         <nav className="nav">
           {["Overview", "Task", "Mentors", "Message", "Settings"].map((n) => (
-            <a
-              key={n}
+    const from = me.current; const to = other.current;
               className={`nav__item ${n === "Message" ? "active" : ""}`}
               href="#/chat">
-              {n}
+    socketRef.current?.emit('dm:send', { from, to, content });
             </a>
           ))}
         </nav>
@@ -175,12 +153,10 @@ export default function ChatPage() {
                   How to make a responsive display from the dashboard?
                 </div>
               </div>
-              {messages.map((m) => (
+              {messages.map((m, idx) => (
                 <div
-                  key={m.id}
-                  className={`bubble ${
-                    m.user_id.endsWith("0000") ? "me" : ""
-                  }`}>
+                  key={m._id || idx}
+                  className={`bubble ${m.userId === "user-1" ? "me" : ""}`}>
                   {m.content}
                 </div>
               ))}
@@ -197,7 +173,7 @@ export default function ChatPage() {
                 ➤
               </button>
             </div>
-          </div>
+                <div key={m._id || idx} className={`bubble ${m.userId === me.current ? "me" : ""}`}>
         </div>
       </main>
 
