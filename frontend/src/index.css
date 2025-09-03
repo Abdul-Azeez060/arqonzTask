@@ -25,6 +25,7 @@ body {
     Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--text);
   background: var(--bg);
+  font-size: 15px;
 }
 
 a {

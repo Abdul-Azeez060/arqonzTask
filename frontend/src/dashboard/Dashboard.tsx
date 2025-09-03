@@ -1,6 +1,13 @@
 import "./Dashboard.css";
+import { Link, useLocation } from "react-router-dom";
 
 export default function Dashboard() {
+  const { pathname } = useLocation();
+  const isActive = (label: string) => {
+    if (label === "Overview") return pathname === "/";
+    if (label === "Message") return pathname === "/chat";
+    return false;
+  };
   return (
     <div className="dash">
       <aside className="dash__sidebar">
@@ -11,17 +18,30 @@ export default function Dashboard() {
           <span className="brand__name">DNX</span>
         </div>
         <nav className="nav">
-          {["Overview", "Task", "Mentors", "Message", "Settings"].map(
-            (item, i) => (
-              <a
-                key={item}
-                className={`nav__item ${i === 0 ? "active" : ""}`}
-                href="#">
-                <span className="nav__icon" />
-                <span>{item}</span>
-              </a>
-            )
-          )}
+          <Link
+            to="/"
+            className={`nav__item ${isActive("Overview") ? "active" : ""}`}>
+            <OverviewIcon className="nav__svg" />
+            <span>Overview</span>
+          </Link>
+          <a className="nav__item" href="#">
+            <BookIcon className="nav__svg" />
+            <span>Task</span>
+          </a>
+          <a className="nav__item" href="#">
+            <MentorIcon className="nav__svg" />
+            <span>Mentors</span>
+          </a>
+          <Link
+            to="/chat"
+            className={`nav__item ${isActive("Message") ? "active" : ""}`}>
+            <ChatIcon className="nav__svg" />
+            <span>Message</span>
+          </Link>
+          <a className="nav__item" href="#">
+            <GearIcon className="nav__svg" />
+            <span>Settings</span>
+          </a>
         </nav>
 
         <div className="help">
@@ -169,22 +189,34 @@ export default function Dashboard() {
         </div>
 
         <div className="card today">
+          <div className="today__head">
+            <span className="muted">Task Today</span>
+            <button className="icon-btn" aria-label="more">
+              ⋯
+            </button>
+          </div>
           <img
             className="thumb"
             src="https://images.unsplash.com/photo-1558655146-9f40138edfeb?q=80&w=800&auto=format&fit=crop"
             alt="task"
           />
           <h4>Creating Awesome Mobile Apps</h4>
-          <div className="muted">UI/UX Designer</div>
-          <div className="progress">
+          <div className="muted">UI / UX Designer</div>
+
+          <div className="progress__row">
+            <span>Progress</span>
+            <span className="muted">90%</span>
+          </div>
+          <div className="progress --thick">
             <div className="progress__bar">
               <span style={{ width: "90%" }} />
             </div>
-            <span className="muted">90%</span>
           </div>
-          <div className="tiny-row">
-            <ClockIcon />
-            <span className="muted">1 Hour</span>
+
+          <div className="tiny-row space-between">
+            <span className="tiny-row">
+              <ClockIcon /> 1 Hour
+            </span>
             <div className="avatars">
               {[1, 2, 3, 4, 5].map((i) => (
                 <img
@@ -195,18 +227,21 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
+          <div className="divider" />
+
           <div className="detail">
             <div className="detail__head">
               <span>Detail Task</span>
-              <span className="muted">UI/UX Designer</span>
+              <span className="muted">UI / UX Designer</span>
             </div>
-            <ol>
+            <ol className="num-list">
               <li>Understanding the tools in Figma</li>
               <li>Understand the basics of making designs</li>
               <li>Design a mobile application with figma</li>
             </ol>
           </div>
-          <button className="btn btn-primary full">Go To Detail</button>
+          <button className="btn btn-primary full big">Go To Detail</button>
         </div>
       </aside>
     </div>
@@ -230,21 +265,26 @@ function MentorCard({
 }) {
   return (
     <div className="mentor card flat">
-      <img className="mentor__avatar" src={img} alt={name} />
+      <img className="mentor__avatar circle" src={img} alt={name} />
       <div className="mentor__info">
         <div className="mentor__name">{name}</div>
         <div className="muted small">{role}</div>
         <div className="mentor__meta">
-          <span className="muted small">{tasks} Task</span>
-          <span className="muted small">⭐ {rating}</span>
+          <span className="muted small meta">
+            <TaskBadgeIcon /> {tasks} Task
+          </span>
+          <span className="muted small meta">
+            <StarIcon /> {rating}
+          </span>
         </div>
       </div>
-      <button
-        className={`btn ${
-          action.includes("Follow") ? "btn-ghost" : "btn-muted"
-        }`}>
-        {action}
-      </button>
+      {action.includes("Follow") ? (
+        <a className="follow-link" href="#">
+          + Follow
+        </a>
+      ) : (
+        <span className="muted">Followed</span>
+      )}
     </div>
   );
 }
@@ -367,6 +407,123 @@ function ClockIcon() {
       strokeLinejoin="round">
       <circle cx="12" cy="12" r="10"></circle>
       <polyline points="12 6 12 12 16 14"></polyline>
+    </svg>
+  );
+}
+
+// Sidebar icons
+function OverviewIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="14" width="7" height="7" rx="2" />
+      <rect x="3" y="14" width="7" height="7" rx="2" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="#fbbf24"
+      xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+    </svg>
+  );
+}
+function TaskBadgeIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#6b7280"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path d="M8 12h8M8 8h8M8 16h5" />
+    </svg>
+  );
+}
+function BookIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M4 4v15.5A2.5 2.5 0 0 0 6.5 22H20V6a2 2 0 0 0-2-2H6" />
+    </svg>
+  );
+}
+function MentorIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <polygon points="12 2 19 7 19 17 12 22 5 17 5 7 12 2" />
+      <circle cx="12" cy="10" r="2" />
+    </svg>
+  );
+}
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V5a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+    </svg>
+  );
+}
+function GearIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V22a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 1 1 0-4h.09c.64 0 1.23-.38 1.49-.97a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.52.42 1.22.52 1.82.26.59-.26.97-.85.97-1.49V4a2 2 0 1 1 4 0v.09c0 .64.38 1.23.97 1.49.6.26 1.3.16 1.82-.26l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.42.52-.52 1.22-.26 1.82.26.59.85.97 1.49.97H22a2 2 0 1 1 0 4h-.09c-.64 0-1.23.38-1.49.97z" />
     </svg>
   );
 }

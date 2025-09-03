@@ -4,6 +4,8 @@ const dotenv = require("dotenv");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 dotenv.config();
 
 // Mongo models
@@ -18,10 +20,29 @@ const messageSchema = new mongoose.Schema(
 const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
 
+const userSchema = new mongoose.Schema(
+  {
+    username: { type: String, unique: true, index: true },
+    passwordHash: String,
+  },
+  { timestamps: true }
+);
+const User = mongoose.models.User || mongoose.model("User", userSchema);
+
 async function main() {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://127.0.0.1:27017/mern_chat";
-  await mongoose.connect(MONGO_URI);
+  let useDb = true;
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log("MongoDB connected");
+  } catch (err) {
+    useDb = false;
+    console.warn(
+      "MongoDB connection failed. Falling back to in-memory store for development.",
+      err?.message || err
+    );
+  }
 
   const app = express();
   app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
@@ -38,45 +59,138 @@ async function main() {
   // helper to build 1-1 conversation id
   const convId = (a, b) => [a, b].sort().join(":");
 
+  // In-memory fallback store
+  const memory = new Map(); // roomId -> [{ _id, roomId, userId, content, createdAt }]
+  const memoryUsers = new Map(); // username -> {username, passwordHash}
+  const nowIso = () => new Date().toISOString();
+  const uuid = () =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  async function getMessages(roomId) {
+    if (useDb) {
+      return await Message.find({ roomId })
+        .sort({ createdAt: 1 })
+        .limit(200)
+        .lean();
+    }
+    const arr = memory.get(roomId) || [];
+    // Return a shallow copy sorted by createdAt just in case
+    return [...arr]
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .slice(-200);
+  }
+  async function createMessage({ roomId, userId, content }) {
+    if (useDb) {
+      return await Message.create({ roomId, userId, content });
+    }
+    const msg = { _id: uuid(), roomId, userId, content, createdAt: nowIso() };
+    const arr = memory.get(roomId) || [];
+    arr.push(msg);
+    memory.set(roomId, arr);
+    return msg;
+  }
+
+  // Auth helpers
+  const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+  async function upsertRootUser() {
+    const username = "remo";
+    const password = "1234";
+    const passwordHash = await bcrypt.hash(password, 10);
+    if (useDb) {
+      const existing = await User.findOne({ username }).lean();
+      if (!existing) await User.create({ username, passwordHash });
+    } else {
+      if (!memoryUsers.has(username))
+        memoryUsers.set(username, { username, passwordHash });
+    }
+    console.log("Root user ready:", username);
+  }
+  await upsertRootUser();
+
+  async function findUser(username) {
+    if (useDb) return await User.findOne({ username }).lean();
+    return memoryUsers.get(username) || null;
+  }
+  async function validateUser(username, password) {
+    const u = await findUser(username);
+    if (!u) return null;
+    const ok = await bcrypt.compare(password, u.passwordHash);
+    return ok ? { username: u.username } : null;
+  }
+  function signToken(payload) {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+  }
+  function requireAuth(req, res, next) {
+    const hdr = req.headers.authorization || "";
+    const [, token] = hdr.split(" ");
+    if (!token) return res.status(401).json({ error: "unauthorized" });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (e) {
+      return res.status(401).json({ error: "invalid token" });
+    }
+  }
+
+  // Auth routes
+  app.post("/auth/login", async (req, res) => {
+    const { username, password } = req.body || {};
+    if (!username || !password)
+      return res.status(400).json({ error: "username and password required" });
+    const user = await validateUser(username, password);
+    if (!user) return res.status(401).json({ error: "invalid credentials" });
+    const token = signToken({ username: user.username });
+    res.json({ token, user });
+  });
+
   // history
-  app.get("/rooms/:roomId/messages", async (req, res) => {
+  app.get("/rooms/:roomId/messages", requireAuth, async (req, res) => {
     const { roomId } = req.params;
-    const docs = await Message.find({ roomId })
-      .sort({ createdAt: 1 })
-      .limit(200)
-      .lean();
+    const docs = await getMessages(roomId);
     res.json(docs);
   });
 
   // simple post (also emits)
-  app.post("/rooms/:roomId/messages", async (req, res) => {
+  app.post("/rooms/:roomId/messages", requireAuth, async (req, res) => {
     const { roomId } = req.params;
     const { userId, content } = req.body;
     if (!content) return res.status(400).json({ error: "content required" });
-    const msg = await Message.create({ roomId, userId, content });
+    const msg = await createMessage({ roomId, userId, content });
     io.to(roomId).emit("message:new", msg);
     res.status(201).json(msg);
   });
 
   // 1-1: history
-  app.get("/dm/:a/:b/messages", async (req, res) => {
+  app.get("/dm/:a/:b/messages", requireAuth, async (req, res) => {
     const id = convId(req.params.a, req.params.b);
-    const docs = await Message.find({ roomId: id })
-      .sort({ createdAt: 1 })
-      .limit(200)
-      .lean();
+    const docs = await getMessages(id);
     res.json(docs);
   });
 
   // 1-1: send
-  app.post("/dm/:a/:b/messages", async (req, res) => {
+  app.post("/dm/:a/:b/messages", requireAuth, async (req, res) => {
     const { a, b } = req.params;
     const { from, content } = req.body;
     if (!content) return res.status(400).json({ error: "content required" });
     const roomId = convId(a, b);
-    const msg = await Message.create({ roomId, userId: from, content });
+    const msg = await createMessage({ roomId, userId: from, content });
     io.to(roomId).emit("message:new", msg);
     res.status(201).json(msg);
+  });
+
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("unauthorized"));
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      socket.user = decoded; // { username }
+      next();
+    } catch (e) {
+      next(new Error("invalid token"));
+    }
   });
 
   io.on("connection", (socket) => {
@@ -85,7 +199,7 @@ async function main() {
     });
     socket.on("message:send", async ({ roomId, userId, content }) => {
       if (!content) return;
-      const msg = await Message.create({ roomId, userId, content });
+      const msg = await createMessage({ roomId, userId, content });
       io.to(roomId).emit("message:new", msg);
     });
 
@@ -96,7 +210,7 @@ async function main() {
     socket.on("dm:send", async ({ from, to, content }) => {
       if (!content) return;
       const roomId = convId(from, to);
-      const msg = await Message.create({ roomId, userId: from, content });
+      const msg = await createMessage({ roomId, userId: from, content });
       io.to(roomId).emit("message:new", msg);
     });
   });
