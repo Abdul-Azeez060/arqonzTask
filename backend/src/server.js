@@ -45,12 +45,12 @@ async function main() {
   }
 
   const app = express();
-  app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
+  app.use(cors({ origin: "*" }));
   app.use(express.json());
 
   const server = http.createServer(app);
   const io = new Server(server, {
-    cors: { origin: process.env.FRONTEND_ORIGIN || "*" },
+    cors: { origin: "*" },
   });
 
   // health
