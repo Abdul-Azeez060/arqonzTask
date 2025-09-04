@@ -1,16 +1,211 @@
 import "./Dashboard.css";
 import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
+
+type Mentor = {
+  _id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  tasks: number;
+  rating: number;
+  followed?: boolean;
+};
+type TaskDoc = {
+  _id: string;
+  title: string;
+  role: string;
+  progress: number;
+  dueDate?: string;
+  image: string;
+  participants?: string[];
+  duration?: string;
+  detailItems?: string[];
+  type: string;
+};
+type Summary = {
+  runningScore: number;
+  runningTotal: number;
+  meterPercent: number;
+};
+type Activity = { points: number[]; range: string };
+type CalendarDoc = { monthLabel: string; days: number[]; activeDay: number };
 
 export default function Dashboard() {
   const { pathname } = useLocation();
+  const [token, setToken] = useState<string | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [activity, setActivity] = useState<Activity | null>(null);
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<TaskDoc[]>([]);
+  const [todayTask, setTodayTask] = useState<TaskDoc | null>(null);
+  const [calendar, setCalendar] = useState<CalendarDoc | null>(null);
+  const [mentorPage, setMentorPage] = useState(0);
+  const [taskPage, setTaskPage] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isActive = (label: string) => {
     if (label === "Overview") return pathname === "/";
     if (label === "Message") return pathname === "/chat";
     return false;
   };
+
+  // Load token or auto-login dev user if missing
+  useEffect(() => {
+    const stored = localStorage.getItem("token");
+    if (stored) {
+      setToken(stored);
+      return;
+    }
+    // Dev fallback: auto-login as remo
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: "remo", password: "1234" }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("username", data.user?.username || "remo");
+          setToken(data.token);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // detect mobile width for sidebar behavior
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Fetch dashboard data
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/dashboard`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setSummary(data.summary || null);
+        setActivity(data.activity || null);
+        setMentors(Array.isArray(data.mentors) ? data.mentors : []);
+        setUpcomingTasks(
+          Array.isArray(data.upcomingTasks) ? data.upcomingTasks : []
+        );
+        setTodayTask(data.todayTask || null);
+        setCalendar(data.calendar || null);
+      } catch {}
+    })();
+  }, [token]);
+
+  // Pagination: 2 items per page
+  const mentorFallback: Mentor[] = [
+    {
+      _id: "1",
+      name: "Curious George",
+      role: "UI/UX Design",
+      avatar: "https://i.pravatar.cc/64?img=12",
+      tasks: 40,
+      rating: 4.7,
+      followed: false,
+    },
+    {
+      _id: "2",
+      name: "Abraham Lincoln",
+      role: "3D Design",
+      avatar: "https://i.pravatar.cc/64?img=31",
+      tasks: 32,
+      rating: 4.9,
+      followed: true,
+    },
+    {
+      _id: "3",
+      name: "Ada Lovelace",
+      role: "Backend Engineer",
+      avatar: "https://i.pravatar.cc/64?img=45",
+      tasks: 28,
+      rating: 4.8,
+      followed: false,
+    },
+    {
+      _id: "4",
+      name: "Grace Hopper",
+      role: "Computer Scientist",
+      avatar: "https://i.pravatar.cc/64?img=7",
+      tasks: 50,
+      rating: 5.0,
+      followed: true,
+    },
+  ];
+  const mentorList = mentors.length ? mentors : mentorFallback;
+  const mentorPages = Math.max(1, Math.ceil(mentorList.length / 2));
+  const mentorStart = (mentorPage % mentorPages) * 2;
+  const mentorSlice = mentorList.slice(mentorStart, mentorStart + 2);
+  useEffect(() => {
+    setMentorPage(0);
+  }, [mentorList.length]);
+
+  const taskFallback: TaskDoc[] = [
+    {
+      _id: "t1",
+      title: "Creating Mobile App Design",
+      role: "UI/UX Design",
+      progress: 75,
+      image:
+        "https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=600&auto=format&fit=crop",
+      type: "upcoming",
+    },
+    {
+      _id: "t2",
+      title: "Creating Perfect Website",
+      role: "Web Developer",
+      progress: 85,
+      image:
+        "https://images.unsplash.com/photo-1484417894907-623942c8ee29?q=80&w=600&auto=format&fit=crop",
+      type: "upcoming",
+    },
+    {
+      _id: "t3",
+      title: "Redesign Dashboard UX",
+      role: "Product Design",
+      progress: 35,
+      image:
+        "https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop",
+      type: "upcoming",
+    },
+    {
+      _id: "t4",
+      title: "Implement Realtime Chat",
+      role: "Full-stack",
+      progress: 60,
+      image:
+        "https://images.unsplash.com/photo-1518779578993-ec3579fee39f?q=80&w=800&auto=format&fit=crop",
+      type: "upcoming",
+    },
+  ];
+  const tasksList = upcomingTasks.length ? upcomingTasks : taskFallback;
+  const taskPages = Math.max(1, Math.ceil(tasksList.length / 2));
+  const taskStart = (taskPage % taskPages) * 2;
+  const taskSlice = tasksList.slice(taskStart, taskStart + 2);
+  useEffect(() => {
+    setTaskPage(0);
+  }, [tasksList.length]);
   return (
     <div className="dash">
-      <aside className="dash__sidebar">
+      <aside
+        className={`dash__sidebar ${
+          isMobile ? (sidebarOpen ? "open" : "closed") : ""
+        }`}>
         <div className="brand">
           <div className="brand__logo">
             <span className="logo-pill">U</span>
@@ -43,7 +238,6 @@ export default function Dashboard() {
             <span>Settings</span>
           </a>
         </nav>
-
         <div className="help">
           <div className="help__badge">?</div>
           <h4>Help Center</h4>
@@ -54,10 +248,22 @@ export default function Dashboard() {
         </div>
       </aside>
 
+      {isMobile && sidebarOpen && (
+        <div className="backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+
       <main className="dash__main">
         <header className="topbar">
           <div>
-            <h2>Hi, Dennis Nzioki</h2>
+            <div className="tiny-row" style={{ gap: 8 }}>
+              <button
+                className="icon-btn hamburger"
+                aria-label="menu"
+                onClick={() => setSidebarOpen((v) => !v)}>
+                ☰
+              </button>
+              <h2 style={{ margin: 0 }}>Hi, Dennis Nzioki</h2>
+            </div>
             <p className="muted">Let's finish your task today!</p>
           </div>
           <div className="topbar__right">
@@ -76,13 +282,15 @@ export default function Dashboard() {
           <div className="card running">
             <div className="running__title">Running Task</div>
             <div className="running__content">
-              <div className="running__score">65</div>
+              <div className="running__score">
+                {summary?.runningScore ?? 65}
+              </div>
               <div className="running__meter">
                 <div className="meter__ring">
-                  <span>45%</span>
+                  <span>{summary?.meterPercent ?? 45}%</span>
                 </div>
                 <div className="running__total">
-                  100
+                  {summary?.runningTotal ?? 100}
                   <br />
                   Task
                 </div>
@@ -93,70 +301,88 @@ export default function Dashboard() {
           <div className="card activity">
             <div className="activity__header">
               <span>Activity</span>
-              <span className="muted">This Week</span>
+              <span className="muted">{activity?.range ?? "This Week"}</span>
             </div>
-            <MiniChart />
+            <MiniChart
+              points={activity?.points || [60, 70, 40, 65, 30, 55, 45, 50]}
+            />
           </div>
         </section>
 
         <section className="row">
           <h3>Monthly Mentors</h3>
           <div className="row__nav">
-            <button className="icon-btn">
+            <button
+              className="icon-btn"
+              aria-label="previous mentors"
+              onClick={() =>
+                setMentorPage((p) => (p - 1 + mentorPages) % mentorPages)
+              }>
               <ChevronLeft />
             </button>
-            <button className="icon-btn">
+            <button
+              className="icon-btn"
+              aria-label="next mentors"
+              onClick={() => setMentorPage((p) => (p + 1) % mentorPages)}>
               <ChevronRight />
             </button>
           </div>
         </section>
 
         <div className="cards two">
-          <MentorCard
-            name="Curious George"
-            role="UI/UX Design"
-            tasks={40}
-            rating="4.7 (750 Reviews)"
-            img="https://i.pravatar.cc/64?img=12"
-            action="+ Follow"
-          />
-          <MentorCard
-            name="Abraham Lincoln"
-            role="3D Design"
-            tasks={32}
-            rating="4.9 (510 Reviews)"
-            img="https://i.pravatar.cc/64?img=31"
-            action="Followed"
-          />
+          {mentorSlice.map((m) => (
+            <MentorCard
+              key={m._id}
+              name={m.name}
+              role={m.role}
+              tasks={m.tasks}
+              rating={`${m.rating.toFixed(1)} (reviews)`}
+              img={m.avatar}
+              action={m.followed ? "Followed" : "+ Follow"}
+            />
+          ))}
         </div>
 
         <section className="row">
           <h3>Upcoming Task</h3>
           <div className="row__nav">
-            <button className="icon-btn">
+            <button
+              className="icon-btn"
+              aria-label="previous tasks"
+              onClick={() =>
+                setTaskPage((p) => (p - 1 + taskPages) % taskPages)
+              }>
               <ChevronLeft />
             </button>
-            <button className="icon-btn">
+            <button
+              className="icon-btn"
+              aria-label="next tasks"
+              onClick={() => setTaskPage((p) => (p + 1) % taskPages)}>
               <ChevronRight />
             </button>
           </div>
         </section>
 
         <div className="cards two">
-          <TaskCard
-            title="Creating Mobile App Design"
-            role="UI/UX Design"
-            progress={75}
-            daysLeft="3 Days Left"
-            img="https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=600&auto=format&fit=crop"
-          />
-          <TaskCard
-            title="Creating Perfect Website"
-            role="Web Developer"
-            progress={85}
-            daysLeft="4 Days Left"
-            img="https://images.unsplash.com/photo-1484417894907-623942c8ee29?q=80&w=600&auto=format&fit=crop"
-          />
+          {taskSlice.map((t) => (
+            <TaskCard
+              key={t._id}
+              title={t.title}
+              role={t.role}
+              progress={t.progress}
+              daysLeft={
+                t.dueDate
+                  ? `${Math.max(
+                      1,
+                      Math.ceil(
+                        (new Date(t.dueDate).getTime() - Date.now()) / 86400000
+                      )
+                    )} Days Left`
+                  : ""
+              }
+              img={t.image}
+            />
+          ))}
         </div>
       </main>
 
@@ -167,7 +393,7 @@ export default function Dashboard() {
               <ChevronLeft />
             </button>
             <div>
-              <div className="muted">July 2022</div>
+              <div className="muted">{calendar?.monthLabel ?? "July 2022"}</div>
             </div>
             <button className="icon-btn">
               <ChevronRight />
@@ -180,8 +406,12 @@ export default function Dashboard() {
                 {d}
               </span>
             ))}
-            {[10, 11, 12, 13, 14, 15, 16].map((n) => (
-              <button key={n} className={`date ${n === 14 ? "active" : ""}`}>
+            {(calendar?.days ?? [10, 11, 12, 13, 14, 15, 16]).map((n) => (
+              <button
+                key={n}
+                className={`date ${
+                  n === (calendar?.activeDay ?? 14) ? "active" : ""
+                }`}>
                 {n}
               </button>
             ))}
@@ -197,33 +427,37 @@ export default function Dashboard() {
           </div>
           <img
             className="thumb"
-            src="https://images.unsplash.com/photo-1558655146-9f40138edfeb?q=80&w=800&auto=format&fit=crop"
+            src={
+              todayTask?.image ||
+              "https://images.unsplash.com/photo-1558655146-9f40138edfeb?q=80&w=800&auto=format&fit=crop"
+            }
             alt="task"
           />
-          <h4>Creating Awesome Mobile Apps</h4>
-          <div className="muted">UI / UX Designer</div>
+          <h4>{todayTask?.title ?? "Creating Awesome Mobile Apps"}</h4>
+          <div className="muted">{todayTask?.role ?? "UI / UX Designer"}</div>
 
           <div className="progress__row">
             <span>Progress</span>
-            <span className="muted">90%</span>
+            <span className="muted">{todayTask?.progress ?? 90}%</span>
           </div>
           <div className="progress --thick">
             <div className="progress__bar">
-              <span style={{ width: "90%" }} />
+              <span style={{ width: `${todayTask?.progress ?? 90}%` }} />
             </div>
           </div>
 
           <div className="tiny-row space-between">
             <span className="tiny-row">
-              <ClockIcon /> 1 Hour
+              <ClockIcon /> {todayTask?.duration ?? "1 Hour"}
             </span>
             <div className="avatars">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <img
-                  key={i}
-                  src={`https://i.pravatar.cc/28?img=${i + 10}`}
-                  alt="av"
-                />
+              {(
+                todayTask?.participants ??
+                [11, 12, 13, 14, 15].map(
+                  (i) => `https://i.pravatar.cc/28?img=${i}`
+                )
+              ).map((src, idx) => (
+                <img key={idx} src={src} alt="av" />
               ))}
             </div>
           </div>
@@ -236,9 +470,15 @@ export default function Dashboard() {
               <span className="muted">UI / UX Designer</span>
             </div>
             <ol className="num-list">
-              <li>Understanding the tools in Figma</li>
-              <li>Understand the basics of making designs</li>
-              <li>Design a mobile application with figma</li>
+              {(
+                todayTask?.detailItems ?? [
+                  "Understanding the tools in Figma",
+                  "Understand the basics of making designs",
+                  "Design a mobile application with figma",
+                ]
+              ).map((li, idx) => (
+                <li key={idx}>{li}</li>
+              ))}
             </ol>
           </div>
           <button className="btn btn-primary full big">Go To Detail</button>
@@ -328,16 +568,25 @@ function TaskCard({
   );
 }
 
-function MiniChart() {
+function MiniChart({ points }: { points: number[] }) {
+  // map values to a 0..300 width, 0..100 height polyline
+  const step = 300 / (points.length - 1);
+  const max = Math.max(...points, 100);
+  const min = Math.min(...points, 0);
+  const norm = points.map((v, i) => {
+    const x = i * step;
+    // invert y so larger values go up; pad 10px
+    const y = 90 - ((v - min) / (max - min || 1)) * 70;
+    return `${x},${y}`;
+  });
   return (
     <svg className="chart" viewBox="0 0 300 100" preserveAspectRatio="none">
       <polyline
         fill="none"
         stroke="var(--primary)"
         strokeWidth="3"
-        points="0,60 40,70 80,40 120,65 160,30 200,55 240,45 280,50"
+        points={norm.join(" ")}
       />
-      <circle cx="80" cy="40" r="6" fill="var(--primary)" />
       <g className="axis">
         {[0, 50, 100, 150, 200, 250, 300].map((x, i) => (
           <line key={i} x1={x} y1={90} x2={x} y2={90} stroke="#e5e7eb" />

@@ -59,6 +59,69 @@ async function main() {
   // helper to build 1-1 conversation id
   const convId = (a, b) => [a, b].sort().join(":");
 
+  // ===== Dashboard Schemas =====
+  const mentorSchema = new mongoose.Schema(
+    {
+      name: String,
+      role: String,
+      avatar: String,
+      tasks: Number,
+      rating: Number,
+      followed: { type: Boolean, default: false },
+    },
+    { timestamps: true }
+  );
+  const Mentor =
+    mongoose.models.Mentor || mongoose.model("Mentor", mentorSchema);
+
+  const taskSchema = new mongoose.Schema(
+    {
+      title: String,
+      role: String,
+      progress: Number,
+      dueDate: Date,
+      image: String,
+      participants: [String],
+      duration: String, // e.g., "1 Hour"
+      detailItems: [String], // today task checklist
+      type: { type: String, index: true }, // "upcoming" | "today"
+    },
+    { timestamps: true }
+  );
+  const Task = mongoose.models.Task || mongoose.model("Task", taskSchema);
+
+  const summarySchema = new mongoose.Schema(
+    {
+      runningScore: Number,
+      runningTotal: Number,
+      meterPercent: Number,
+    },
+    { timestamps: true }
+  );
+  const Summary =
+    mongoose.models.Summary || mongoose.model("Summary", summarySchema);
+
+  const activitySchema = new mongoose.Schema(
+    {
+      points: [Number], // values for the line chart
+      range: { type: String, default: "This Week" },
+    },
+    { timestamps: true }
+  );
+  const Activity =
+    mongoose.models.Activity || mongoose.model("Activity", activitySchema);
+
+  const calendarSchema = new mongoose.Schema(
+    {
+      monthLabel: String,
+      days: [Number],
+      activeDay: Number,
+    },
+    { timestamps: true }
+  );
+  const Calendar =
+    mongoose.models.Calendar || mongoose.model("Calendar", calendarSchema);
+
   // In-memory fallback store
   const memory = new Map(); // roomId -> [{ _id, roomId, userId, content, createdAt }]
   const memoryUsers = new Map(); // username -> {username, passwordHash}
@@ -109,6 +172,221 @@ async function main() {
     }
   }
   await upsertUsers(["remo", "juliet"]);
+
+  // Seed dashboard data if empty
+  async function seedDashboard() {
+    if (!useDb) return; // only seed when db is active
+    const [mentorCount, taskCount, summaryCount, activityCount, calendarCount] =
+      await Promise.all([
+        Mentor.countDocuments(),
+        Task.countDocuments(),
+        Summary.countDocuments(),
+        Activity.countDocuments(),
+        Calendar.countDocuments(),
+      ]);
+
+    if (mentorCount === 0) {
+      await Mentor.insertMany([
+        {
+          name: "Curious George",
+          role: "UI/UX Design",
+          avatar: "https://i.pravatar.cc/64?img=12",
+          tasks: 40,
+          rating: 4.7,
+          followed: false,
+        },
+        {
+          name: "Abraham Lincoln",
+          role: "3D Design",
+          avatar: "https://i.pravatar.cc/64?img=31",
+          tasks: 32,
+          rating: 4.9,
+          followed: true,
+        },
+      ]);
+    }
+
+    if (taskCount === 0) {
+      await Task.insertMany([
+        {
+          title: "Creating Mobile App Design",
+          role: "UI/UX Design",
+          progress: 75,
+          dueDate: new Date(Date.now() + 3 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=600&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=21",
+            "https://i.pravatar.cc/28?img=22",
+            "https://i.pravatar.cc/28?img=23",
+            "https://i.pravatar.cc/28?img=24",
+          ],
+          type: "upcoming",
+        },
+        {
+          title: "Creating Perfect Website",
+          role: "Web Developer",
+          progress: 85,
+          dueDate: new Date(Date.now() + 4 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1484417894907-623942c8ee29?q=80&w=600&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=21",
+            "https://i.pravatar.cc/28?img=22",
+            "https://i.pravatar.cc/28?img=23",
+            "https://i.pravatar.cc/28?img=24",
+          ],
+          type: "upcoming",
+        },
+        {
+          title: "Creating Awesome Mobile Apps",
+          role: "UI / UX Designer",
+          progress: 90,
+          duration: "1 Hour",
+          image:
+            "https://images.unsplash.com/photo-1558655146-9f40138edfeb?q=80&w=800&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=11",
+            "https://i.pravatar.cc/28?img=12",
+            "https://i.pravatar.cc/28?img=13",
+            "https://i.pravatar.cc/28?img=14",
+            "https://i.pravatar.cc/28?img=15",
+          ],
+          detailItems: [
+            "Understanding the tools in Figma",
+            "Understand the basics of making designs",
+            "Design a mobile application with figma",
+          ],
+          type: "today",
+        },
+      ]);
+    }
+
+    // Top up extra seed if needed for better homepage population
+    const upcomingCount = await Task.countDocuments({ type: "upcoming" });
+    if (upcomingCount < 6) {
+      const extraUpcoming = [
+        {
+          title: "Redesign Dashboard UX",
+          role: "Product Design",
+          progress: 35,
+          dueDate: new Date(Date.now() + 6 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=25",
+            "https://i.pravatar.cc/28?img=26",
+            "https://i.pravatar.cc/28?img=27",
+          ],
+          type: "upcoming",
+        },
+        {
+          title: "Implement Realtime Chat",
+          role: "Full-stack",
+          progress: 60,
+          dueDate: new Date(Date.now() + 2 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1518779578993-ec3579fee39f?q=80&w=800&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=28",
+            "https://i.pravatar.cc/28?img=29",
+          ],
+          type: "upcoming",
+        },
+        {
+          title: "Marketing Landing Page",
+          role: "Frontend Dev",
+          progress: 50,
+          dueDate: new Date(Date.now() + 5 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=800&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=30",
+            "https://i.pravatar.cc/28?img=31",
+          ],
+          type: "upcoming",
+        },
+        {
+          title: "QA Test Suite Update",
+          role: "QA Engineer",
+          progress: 20,
+          dueDate: new Date(Date.now() + 7 * 86400000),
+          image:
+            "https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=800&auto=format&fit=crop",
+          participants: [
+            "https://i.pravatar.cc/28?img=32",
+            "https://i.pravatar.cc/28?img=33",
+          ],
+          type: "upcoming",
+        },
+      ];
+      const need = Math.max(0, 6 - upcomingCount);
+      if (need > 0) await Task.insertMany(extraUpcoming.slice(0, need));
+    }
+
+    if (mentorCount < 6) {
+      const extraMentors = [
+        {
+          name: "Ada Lovelace",
+          role: "Backend Engineer",
+          avatar: "https://i.pravatar.cc/64?img=45",
+          tasks: 28,
+          rating: 4.8,
+          followed: false,
+        },
+        {
+          name: "Grace Hopper",
+          role: "Computer Scientist",
+          avatar: "https://i.pravatar.cc/64?img=7",
+          tasks: 50,
+          rating: 5.0,
+          followed: true,
+        },
+        {
+          name: "Alan Turing",
+          role: "ML Researcher",
+          avatar: "https://i.pravatar.cc/64?img=15",
+          tasks: 22,
+          rating: 4.6,
+          followed: false,
+        },
+        {
+          name: "Katherine Johnson",
+          role: "Data Scientist",
+          avatar: "https://i.pravatar.cc/64?img=22",
+          tasks: 41,
+          rating: 4.9,
+          followed: false,
+        },
+      ];
+      const need = Math.max(0, 6 - mentorCount);
+      if (need > 0) await Mentor.insertMany(extraMentors.slice(0, need));
+    }
+
+    if (summaryCount === 0) {
+      await Summary.create({
+        runningScore: 65,
+        runningTotal: 100,
+        meterPercent: 45,
+      });
+    }
+
+    if (activityCount === 0) {
+      await Activity.create({
+        points: [60, 70, 40, 65, 30, 55, 45, 50],
+        range: "This Week",
+      });
+    }
+
+    if (calendarCount === 0) {
+      await Calendar.create({
+        monthLabel: "July 2022",
+        days: [10, 11, 12, 13, 14, 15, 16],
+        activeDay: 14,
+      });
+    }
+  }
+  await seedDashboard();
 
   async function findUser(username) {
     if (useDb) return await User.findOne({ username }).lean();
@@ -162,6 +440,31 @@ async function main() {
     const msg = await createMessage({ roomId, userId, content });
     io.to(roomId).emit("message:new", msg);
     res.status(201).json(msg);
+  });
+
+  // ===== Dashboard routes (secured) =====
+  app.get("/dashboard", requireAuth, async (_req, res) => {
+    try {
+      const [summary, activity, mentors, upcomingTasks, todayTask, calendar] =
+        await Promise.all([
+          Summary.findOne().lean(),
+          Activity.findOne().lean(),
+          Mentor.find().lean(),
+          Task.find({ type: "upcoming" }).lean(),
+          Task.findOne({ type: "today" }).lean(),
+          Calendar.findOne().lean(),
+        ]);
+      res.json({
+        summary,
+        activity,
+        mentors,
+        upcomingTasks,
+        todayTask,
+        calendar,
+      });
+    } catch (e) {
+      res.status(500).json({ error: "failed to load dashboard" });
+    }
   });
 
   // 1-1: history

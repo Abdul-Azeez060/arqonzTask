@@ -18,6 +18,9 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [token, setToken] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const me = useRef<string>("");
   const other = useRef<string>("");
   const socketRef = useRef<Socket | null>(null);
@@ -49,6 +52,11 @@ export default function ChatPage() {
         : username === "remo"
         ? "juliet"
         : "remo";
+    // initial device width detection
+    const check = () => setIsMobile(window.innerWidth <= 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, [navigate]);
 
   // 2) After token, load history and connect socket with auth
@@ -113,34 +121,40 @@ export default function ChatPage() {
     setInput("");
   }
 
+  async function openConversation(who: string) {
+    if (!who || who === me.current) return;
+    other.current = who;
+    localStorage.setItem("chatWith", who);
+    if (token) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/dm/${me.current}/${who}/messages`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const data = await res.json();
+        setMessages(Array.isArray(data) ? data : []);
+        socketRef.current?.emit("dm:join", { a: me.current, b: who });
+      } catch {
+        setMessages([]);
+      }
+    }
+    if (isMobile) setMobileView("chat");
+  }
+
   function switchPartner() {
     const current = me.current;
     const next = current === "remo" ? "juliet" : "remo";
-    other.current = next;
-    localStorage.setItem("chatWith", next);
-    // reload history for new partner
-    if (token) {
-      (async () => {
-        try {
-          const res = await fetch(
-            `${API_BASE}/dm/${current}/${next}/messages`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-          const data = await res.json();
-          setMessages(Array.isArray(data) ? data : []);
-          socketRef.current?.emit("dm:join", { a: current, b: next });
-        } catch {
-          setMessages([]);
-        }
-      })();
-    }
+    openConversation(next);
   }
 
   return (
-    <div className="dash">
-      <aside className="dash__sidebar">
+    <div className="dash chat-page">
+      <aside
+        className={`dash__sidebar ${
+          isMobile ? (sidebarOpen ? "open" : "closed") : ""
+        }`}>
         <div className="brand">
           <div className="brand__logo">
             <span className="logo-pill">U</span>
@@ -183,6 +197,10 @@ export default function ChatPage() {
         </div>
       </aside>
 
+      {isMobile && sidebarOpen && (
+        <div className="backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+
       <main className="dash__main" style={{ gap: 0 }}>
         <header
           className="topbar"
@@ -191,7 +209,15 @@ export default function ChatPage() {
             paddingBottom: 8,
             marginBottom: 8,
           }}>
-          <h2>Message</h2>
+          <div className="tiny-row">
+            <button
+              className="icon-btn hamburger"
+              aria-label="menu"
+              onClick={() => setSidebarOpen((v) => !v)}>
+              ☰
+            </button>
+            <h2 style={{ marginLeft: 8 }}>Message</h2>
+          </div>
           <div className="topbar__right">
             <button className="icon-btn" aria-label="alerts">
               🔔
@@ -215,98 +241,115 @@ export default function ChatPage() {
         </header>
 
         <div className="chat ">
-          <div className="chat__list">
-            <div className="search">
-              <input placeholder="Search Name" />
-            </div>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="chat__person card flat">
-                <img
-                  className="mentor__avatar"
-                  src={`https://i.pravatar.cc/48?img=${i + 10}`}
-                  alt="avatar"
-                />
-                <div className="person__body">
-                  <div className="person__top">
-                    <div className="person__name">Jakob Saris</div>
-                  </div>
-                  <div className="person__bottom">
-                    <div className="person__preview muted small">
-                      You : Sure! let me tell you about w...
+          {(!isMobile || mobileView === "list") && (
+            <div className="chat__list">
+              <div className="search">
+                <input placeholder="Search Name" />
+              </div>
+              {(["juliet", "remo"] as const).map((u, i) => (
+                <div
+                  key={u}
+                  className="chat__person card flat"
+                  role="button"
+                  onClick={() => openConversation(u)}>
+                  <img
+                    className="mentor__avatar"
+                    src={`https://i.pravatar.cc/48?img=${avatarId(u)}`}
+                    alt={displayName(u)}
+                  />
+                  <div className="person__body">
+                    <div className="person__top">
+                      <div className="person__name">{displayName(u)}</div>
+                    </div>
+                    <div className="person__bottom">
+                      <div className="person__preview muted small">
+                        Tap to view conversation
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="person__meta">
-                  <span className="muted small">2 m Ago</span>
-                  <span className="person__status read" aria-label="Read">
-                    <DoubleCheckIcon />
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="chat__panel ">
-            <div className="chat__header">
-              <div className="person">
-                <img
-                  className="mentor__avatar"
-                  src={`https://i.pravatar.cc/48?img=${avatarId(
-                    other.current
-                  )}`}
-                  alt={displayName(other.current)}
-                />
-                <div>
-                  <div className="mentor__name">
-                    {displayName(other.current)}
+                  <div className="person__meta">
+                    <span className="muted small">{i + 1} m Ago</span>
+                    <span className="person__status read" aria-label="Read">
+                      <DoubleCheckIcon />
+                    </span>
                   </div>
-                  <div className="muted small">● Online</div>
-                </div>
-              </div>
-              <div className="row__nav">
-                <button className="icon-btn">📞</button>
-                <button className="icon-btn">🎥</button>
-                <button className="btn" onClick={switchPartner}>
-                  Chat with {me.current === "remo" ? "Juliet" : "Remo"}
-                </button>
-              </div>
-            </div>
-
-            <div className="chat__body">
-              <div className="badge muted">Today</div>
-              <div className="bubble me">
-                Morning Angelle, I have question about My Task
-              </div>
-              <div className="bubble">
-                Yes sure, Any problem with your assignment?
-              </div>
-              <div className="image-bubble">
-                <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=800&auto=format&fit=crop" />
-                <div className="muted small">
-                  How to make a responsive display from the dashboard?
-                </div>
-              </div>
-              {(Array.isArray(messages) ? messages : []).map((m, idx) => (
-                <div
-                  key={m._id || idx}
-                  className={`bubble ${m.userId === me.current ? "me" : ""}`}>
-                  {m.content}
                 </div>
               ))}
             </div>
+          )}
 
-            <div className="chat__input">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Send your message..."
-                onKeyDown={(e) => e.key === "Enter" && send()}
-              />
-              <button className="btn btn-primary" onClick={send}>
-                ➤
-              </button>
+          {(!isMobile || mobileView === "chat") && (
+            <div className="chat__panel ">
+              <div className="chat__header">
+                <div className="person">
+                  {isMobile && (
+                    <button
+                      className="icon-btn"
+                      aria-label="back"
+                      onClick={() => setMobileView("list")}
+                      style={{ marginRight: 8 }}>
+                      ←
+                    </button>
+                  )}
+                  <img
+                    className="mentor__avatar"
+                    src={`https://i.pravatar.cc/48?img=${avatarId(
+                      other.current
+                    )}`}
+                    alt={displayName(other.current)}
+                  />
+                  <div>
+                    <div className="mentor__name">
+                      {displayName(other.current)}
+                    </div>
+                    <div className="muted small">● Online</div>
+                  </div>
+                </div>
+                <div className="row__nav">
+                  <button className="icon-btn">📞</button>
+                  <button className="icon-btn">🎥</button>
+                  <button className="btn" onClick={switchPartner}>
+                    Chat with {me.current === "remo" ? "Juliet" : "Remo"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="chat__body">
+                <div className="badge muted">Today</div>
+                <div className="bubble me">
+                  Morning Angelle, I have question about My Task
+                </div>
+                <div className="bubble">
+                  Yes sure, Any problem with your assignment?
+                </div>
+                <div className="image-bubble">
+                  <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=800&auto=format&fit=crop" />
+                  <div className="muted small">
+                    How to make a responsive display from the dashboard?
+                  </div>
+                </div>
+                {(Array.isArray(messages) ? messages : []).map((m, idx) => (
+                  <div
+                    key={m._id || idx}
+                    className={`bubble ${m.userId === me.current ? "me" : ""}`}>
+                    {m.content}
+                  </div>
+                ))}
+              </div>
+
+              <div className="chat__input">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Send your message..."
+                  onKeyDown={(e) => e.key === "Enter" && send()}
+                />
+                <button className="btn btn-primary" onClick={send}>
+                  ➤
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>
