@@ -652,12 +652,12 @@
     gap: 12px;
   }
   .chat__panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 100%;
-  width: 100%;
-  overflow: hidden; /* confine scroll to the body */
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 100%;
+    width: 100%;
+    overflow: hidden; /* confine scroll to the body */
   }
   .chat__header {
     display: flex;
