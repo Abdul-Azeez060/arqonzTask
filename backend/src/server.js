@@ -94,20 +94,21 @@ async function main() {
 
   // Auth helpers
   const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-  async function upsertRootUser() {
-    const username = "remo";
-    const password = "1234";
-    const passwordHash = await bcrypt.hash(password, 10);
-    if (useDb) {
-      const existing = await User.findOne({ username }).lean();
-      if (!existing) await User.create({ username, passwordHash });
-    } else {
-      if (!memoryUsers.has(username))
-        memoryUsers.set(username, { username, passwordHash });
+  async function upsertUsers(usernames = []) {
+    for (const username of usernames) {
+      const password = "1234";
+      const passwordHash = await bcrypt.hash(password, 10);
+      if (useDb) {
+        const existing = await User.findOne({ username }).lean();
+        if (!existing) await User.create({ username, passwordHash });
+      } else {
+        if (!memoryUsers.has(username))
+          memoryUsers.set(username, { username, passwordHash });
+      }
+      console.log("User ready:", username);
     }
-    console.log("Root user ready:", username);
   }
-  await upsertRootUser();
+  await upsertUsers(["remo", "juliet"]);
 
   async function findUser(username) {
     if (useDb) return await User.findOne({ username }).lean();
@@ -209,9 +210,13 @@ async function main() {
     });
     socket.on("dm:send", async ({ from, to, content }) => {
       if (!content) return;
-      const roomId = convId(from, to);
-      const msg = await createMessage({ roomId, userId: from, content });
-      io.to(roomId).emit("message:new", msg);
+      try {
+        const roomId = convId(from, to);
+        const msg = await createMessage({ roomId, userId: from, content });
+        io.to(roomId).emit("message:new", msg);
+      } catch (e) {
+        console.error("dm:send failed", e?.message || e);
+      }
     });
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { io, Socket } from "socket.io-client";
 import "../dashboard/Dashboard.css";
 
@@ -18,39 +18,38 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const me = useRef<string>("user-1");
-  const other = useRef<string>("user-2");
+  const me = useRef<string>("");
+  const other = useRef<string>("");
   const socketRef = useRef<Socket | null>(null);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const displayName = (u: string) =>
+    u ? u.charAt(0).toUpperCase() + u.slice(1) : "";
+  const avatarId = (u: string) => (u === "juliet" ? 20 : u === "remo" ? 12 : 5);
   const isActive = (label: string) => {
     if (label === "Overview") return pathname === "/";
     if (label === "Message") return pathname === "/chat";
     return false;
   };
 
-  // 1) Login to get JWT token (root user: remo / 1234)
+  // 1) Load token and identities from storage; redirect to login if missing
   useEffect(() => {
-    async function login() {
-      try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "remo", password: "1234" }),
-        });
-        const data = await res.json();
-        if (res.ok && data?.token) {
-          setToken(data.token);
-        } else {
-          console.warn("Login failed", data);
-          setToken(null);
-        }
-      } catch (e) {
-        console.warn("Login error", e);
-        setToken(null);
-      }
+    const storedToken = localStorage.getItem("token");
+    const username = localStorage.getItem("username");
+    const chatWith = localStorage.getItem("chatWith");
+    if (!storedToken || !username) {
+      navigate("/login");
+      return;
     }
-    login();
-  }, []);
+    setToken(storedToken);
+    me.current = username;
+    other.current =
+      chatWith && chatWith !== username
+        ? chatWith
+        : username === "remo"
+        ? "juliet"
+        : "remo";
+  }, [navigate]);
 
   // 2) After token, load history and connect socket with auth
   useEffect(() => {
@@ -92,6 +91,31 @@ export default function ChatPage() {
     if (!content) return;
     socketRef.current?.emit("dm:send", { from, to, content });
     setInput("");
+  }
+
+  function switchPartner() {
+    const current = me.current;
+    const next = current === "remo" ? "juliet" : "remo";
+    other.current = next;
+    localStorage.setItem("chatWith", next);
+    // reload history for new partner
+    if (token) {
+      (async () => {
+        try {
+          const res = await fetch(
+            `${API_BASE}/dm/${current}/${next}/messages`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const data = await res.json();
+          setMessages(Array.isArray(data) ? data : []);
+          socketRef.current?.emit("dm:join", { a: current, b: next });
+        } catch {
+          setMessages([]);
+        }
+      })();
+    }
   }
 
   return (
@@ -152,15 +176,25 @@ export default function ChatPage() {
             <button className="icon-btn" aria-label="alerts">
               🔔
             </button>
+            <button
+              className="btn"
+              onClick={() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("username");
+                localStorage.removeItem("chatWith");
+                navigate("/login");
+              }}>
+              Logout
+            </button>
             <img
               className="avatar"
-              src="https://i.pravatar.cc/48?img=5"
-              alt="user"
+              src={`https://i.pravatar.cc/48?img=${avatarId(me.current)}`}
+              alt={displayName(me.current) || "user"}
             />
           </div>
         </header>
 
-        <div className="chat">
+        <div className="chat ">
           <div className="chat__list">
             <div className="search">
               <input placeholder="Search Name" />
@@ -170,35 +204,51 @@ export default function ChatPage() {
                 <img
                   className="mentor__avatar"
                   src={`https://i.pravatar.cc/48?img=${i + 10}`}
+                  alt="avatar"
                 />
-                <div>
-                  <div className="mentor__name">Angelle Crison</div>
-                  <div className="muted small">
-                    Thank you very much. I'm glad ...
+                <div className="person__body">
+                  <div className="person__top">
+                    <div className="person__name">Jakob Saris</div>
+                  </div>
+                  <div className="person__bottom">
+                    <div className="person__preview muted small">
+                      You : Sure! let me tell you about w...
+                    </div>
                   </div>
                 </div>
-                <span className="muted small" style={{ marginLeft: "auto" }}>
-                  1 m Ago
-                </span>
+                <div className="person__meta">
+                  <span className="muted small">2 m Ago</span>
+                  <span className="person__status read" aria-label="Read">
+                    <DoubleCheckIcon />
+                  </span>
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="chat__panel card">
+          <div className="chat__panel ">
             <div className="chat__header">
               <div className="person">
                 <img
                   className="mentor__avatar"
-                  src={`https://i.pravatar.cc/48?img=20`}
+                  src={`https://i.pravatar.cc/48?img=${avatarId(
+                    other.current
+                  )}`}
+                  alt={displayName(other.current)}
                 />
                 <div>
-                  <div className="mentor__name">Angelle Crison</div>
+                  <div className="mentor__name">
+                    {displayName(other.current)}
+                  </div>
                   <div className="muted small">● Online</div>
                 </div>
               </div>
               <div className="row__nav">
                 <button className="icon-btn">📞</button>
                 <button className="icon-btn">🎥</button>
+                <button className="btn" onClick={switchPartner}>
+                  Chat with {me.current === "remo" ? "Juliet" : "Remo"}
+                </button>
               </div>
             </div>
 
@@ -239,8 +289,6 @@ export default function ChatPage() {
           </div>
         </div>
       </main>
-
-      <aside className="dash__right" />
     </div>
   );
 }
@@ -330,6 +378,23 @@ function GearIcon({ className }: { className?: string }) {
       strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.33 15a1.65 1.65 0 0 0-1.51-1H1a2 2 0 1 1 0-4h.82A1.65 1.65 0 0 0 3.33 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 3.33 1.65 1.65 0 0 0 9 1.82V1a2 2 0 1 1 4 0v.82a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.67 8a1.65 1.65 0 0 0 1.51 1H23a2 2 0 1 1 0 4h-.82a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  );
+}
+
+function DoubleCheckIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <path d="M2 14l4 4L14 6" />
+      <path d="M9 14l4 4L22 6" />
     </svg>
   );
 }

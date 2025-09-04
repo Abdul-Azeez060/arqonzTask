@@ -2,13 +2,12 @@
   display: grid;
   grid-template-columns: 220px 1fr 360px;
   gap: 24px;
-  padding: 24px;
 }
 
 /* Chat page (global) */
 .chat {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 280px 1fr;
   gap: 16px;
 }
 .chat .search {
@@ -32,10 +31,45 @@
   align-items: center;
   gap: 12px;
 }
+.chat__person.card {
+  padding: 10px 12px;
+}
+.person__body {
+  min-width: 0; /* enable text truncation */
+}
+.person__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.person__name {
+  font-weight: 700;
+  color: #0f172a;
+}
+.person__bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.person__preview {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.person__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.person__status.read svg {
+  color: #5b9cf6; /* bluish read ticks */
+}
 .chat__panel {
   display: flex;
   flex-direction: column;
   height: 640px;
+  width: 50vw;
 }
 .chat__header {
   display: flex;
@@ -369,6 +403,7 @@
   display: flex;
   gap: 12px;
   margin-top: 6px;
+  grid-column: 1 / -1;
 }
 
 .task {
@@ -376,12 +411,18 @@
   grid-template-columns: 160px 1fr;
   gap: 12px;
 }
+.task.card {
+  display: flex;
+  flex-direction: column;
+}
+
 .task__img {
   width: 100%;
-  height: 132px;
+  height: 180px; /* adjust if you want taller/shorter */
   object-fit: cover;
   border-radius: 12px;
 }
+
 .task__title {
   font-weight: 700;
   margin-bottom: 4px;
@@ -459,17 +500,44 @@
   border-color: #11162c;
 }
 
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 44rem;
+}
 .today .thumb {
   width: 100%;
-  height: 160px;
+  height: clamp(180px, 28%, 260px);
   object-fit: cover;
   border-radius: 12px;
 }
 .today h4 {
-  margin: 8px 0 4px;
+  margin: 0;
 }
 .detail {
-  margin-top: 12px;
+  margin-top: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.today .btn.full.big {
+  margin-top: auto;
+}
+.progress__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.space-between {
+  justify-content: space-between;
+}
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+.progress.--thick .progress__bar {
+  height: 12px;
 }
 .detail__head {
   display: flex;
@@ -511,7 +579,7 @@
   /* Chat page */
   .chat {
     display: grid;
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 260px 1fr;
     gap: 16px;
   }
   .chat .search {

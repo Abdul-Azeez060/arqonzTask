@@ -269,22 +269,22 @@ function MentorCard({
       <div className="mentor__info">
         <div className="mentor__name">{name}</div>
         <div className="muted small">{role}</div>
-        <div className="mentor__meta">
-          <span className="muted small meta">
-            <TaskBadgeIcon /> {tasks} Task
-          </span>
-          <span className="muted small meta">
-            <StarIcon /> {rating}
-          </span>
-        </div>
       </div>
-      {action.includes("Follow") ? (
+      {action === "+ Follow" ? (
         <a className="follow-link" href="#">
           + Follow
         </a>
       ) : (
         <span className="muted">Followed</span>
       )}
+      <div className="mentor__meta ">
+        <span className="muted small meta">
+          <TaskBadgeIcon /> {tasks} Task
+        </span>
+        <span className="muted small meta">
+          <StarIcon /> {rating}
+        </span>
+      </div>
     </div>
   );
 }
