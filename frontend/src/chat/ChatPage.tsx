@@ -84,12 +84,32 @@ export default function ChatPage() {
     };
   }, [token]);
 
-  function send() {
+  async function send() {
     const from = me.current;
     const to = other.current;
     const content = input.trim();
     if (!content) return;
-    socketRef.current?.emit("dm:send", { from, to, content });
+    const s = socketRef.current;
+    if (s && (s.connected as boolean)) {
+      s.emit("dm:send", { from, to, content });
+    } else if (token) {
+      try {
+        const res = await fetch(`${API_BASE}/dm/${from}/${to}/messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ from, content }),
+        });
+        if (res.ok) {
+          const msg = await res.json();
+          setMessages((prev) => [...prev, msg]);
+        }
+      } catch (e) {
+        // no-op; UI remains unchanged
+      }
+    }
     setInput("");
   }
 
